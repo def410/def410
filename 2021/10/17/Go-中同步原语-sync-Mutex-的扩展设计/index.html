@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang=en>
+<head>
+    <!-- so meta -->
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="HandheldFriendly" content="True">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5" />
+    <meta name="description" content="0x00 - 为什么需要互斥锁？互斥锁是一种同步工具，在 Go 中，它可以保证同一时刻只有一个 Goroutine 进入临界区，访问共享资源时不被其他 Goroutine 打扰。 Go 语言标准库中提供了 sync.Mutex 这个同步原语，实现了互斥锁的功能，使用起来也非常简单，用 Lock() 和 TryLock() 两个方法就可以完成“上锁”和“解锁”的操作。同时，sync 包中还实现了读写">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Go 中同步原语 sync.Mutex 的扩展设计">
+<meta property="og:url" content="https://def410.github.io/2021/10/17/Go-%E4%B8%AD%E5%90%8C%E6%AD%A5%E5%8E%9F%E8%AF%AD-sync-Mutex-%E7%9A%84%E6%89%A9%E5%B1%95%E8%AE%BE%E8%AE%A1/index.html">
+<meta property="og:site_name" content="def410&#39;s blog">
+<meta property="og:description" content="0x00 - 为什么需要互斥锁？互斥锁是一种同步工具，在 Go 中，它可以保证同一时刻只有一个 Goroutine 进入临界区，访问共享资源时不被其他 Goroutine 打扰。 Go 语言标准库中提供了 sync.Mutex 这个同步原语，实现了互斥锁的功能，使用起来也非常简单，用 Lock() 和 TryLock() 两个方法就可以完成“上锁”和“解锁”的操作。同时，sync 包中还实现了读写">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2021-10-17T07:26:18.000Z">
+<meta property="article:modified_time" content="2021-10-17T07:28:53.000Z">
+<meta property="article:author" content="def410">
+<meta property="article:tag" content="Go">
+<meta property="article:tag" content="并发编程">
+<meta name="twitter:card" content="summary">
+    
+    
+      
+        
+          <link rel="shortcut icon" href="/images/favicon.ico">
+        
+      
+      
+        
+          <link rel="icon" type="image/png" href="/images/favicon-192x192.png" sizes="192x192">
+        
+      
+      
+        
+          <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
+        
+      
+    
+    <!-- title -->
+    <title>Go 中同步原语 sync.Mutex 的扩展设计</title>
+    <!-- styles -->
+    
+<link rel="stylesheet" href="/css/style.css">
+
+    <!-- persian styles -->
+    
+    <!-- rss -->
+    
+    
+	<!-- mathjax -->
+	
+<meta name="generator" content="Hexo 5.4.0"></head>
+
+<body class="max-width mx-auto px3 ltr">
+    
+      <div id="header-post">
+  <a id="menu-icon" href="#" aria-label="Menu"><i class="fas fa-bars fa-lg"></i></a>
+  <a id="menu-icon-tablet" href="#" aria-label="Menu"><i class="fas fa-bars fa-lg"></i></a>
+  <a id="top-icon-tablet" href="#" "Top" onclick="$('html, body').animate({ scrollTop: 0 }, 'fast');" style="display:none;"><i class="fas fa-chevron-up fa-lg"></i></a>
+  <span id="menu">
+    <span id="nav">
+      <ul>
+         
+          <li><a href="/">/home</a></li>
+         
+          <li><a href="/archives/">/articles</a></li>
+        
+      </ul>
+    </span>
+    <br/>
+    <span id="actions">
+      <ul>
+        
+        
+        <li><a class="icon" aria-label="Next post " href="/2021/01/17/thompson/"><i class="fas fa-chevron-right" aria-hidden="true" onmouseover="$('#i-next').toggle();" onmouseout="$('#i-next').toggle();"></i></a></li>
+        
+        <li><a class="icon" aria-label="Back to top " href="#" onclick="$('html, body').animate({ scrollTop: 0 }, 'fast');"><i class="fas fa-chevron-up" aria-hidden="true" onmouseover="$('#i-top').toggle();" onmouseout="$('#i-top').toggle();"></i></a></li>
+        <li><a class="icon" aria-label="Share post " href="#"><i class="fas fa-share-alt" aria-hidden="true" onmouseover="$('#i-share').toggle();" onmouseout="$('#i-share').toggle();" onclick="$('#share').toggle();return false;"></i></a></li>
+      </ul>
+      <span id="i-prev" class="info" style="display:none;">Previous post</span>
+      <span id="i-next" class="info" style="display:none;">Next post</span>
+      <span id="i-top" class="info" style="display:none;">Back to top</span>
+      <span id="i-share" class="info" style="display:none;">Share post</span>
+    </span>
+    <br/>
+    <div id="share" style="display: none">
+      <ul>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.facebook.com/sharer.php?u=https://def410.github.io/2021/10/17/Go-%E4%B8%AD%E5%90%8C%E6%AD%A5%E5%8E%9F%E8%AF%AD-sync-Mutex-%E7%9A%84%E6%89%A9%E5%B1%95%E8%AE%BE%E8%AE%A1/"><i class="fab fa-facebook " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://twitter.com/share?url=https://def410.github.io/2021/10/17/Go-%E4%B8%AD%E5%90%8C%E6%AD%A5%E5%8E%9F%E8%AF%AD-sync-Mutex-%E7%9A%84%E6%89%A9%E5%B1%95%E8%AE%BE%E8%AE%A1/&text=Go 中同步原语 sync.Mutex 的扩展设计"><i class="fab fa-twitter " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.linkedin.com/shareArticle?url=https://def410.github.io/2021/10/17/Go-%E4%B8%AD%E5%90%8C%E6%AD%A5%E5%8E%9F%E8%AF%AD-sync-Mutex-%E7%9A%84%E6%89%A9%E5%B1%95%E8%AE%BE%E8%AE%A1/&title=Go 中同步原语 sync.Mutex 的扩展设计"><i class="fab fa-linkedin " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://pinterest.com/pin/create/bookmarklet/?url=https://def410.github.io/2021/10/17/Go-%E4%B8%AD%E5%90%8C%E6%AD%A5%E5%8E%9F%E8%AF%AD-sync-Mutex-%E7%9A%84%E6%89%A9%E5%B1%95%E8%AE%BE%E8%AE%A1/&is_video=false&description=Go 中同步原语 sync.Mutex 的扩展设计"><i class="fab fa-pinterest " aria-hidden="true"></i></a></li>
+  <li><a class="icon" href="mailto:?subject=Go 中同步原语 sync.Mutex 的扩展设计&body=Check out this article: https://def410.github.io/2021/10/17/Go-%E4%B8%AD%E5%90%8C%E6%AD%A5%E5%8E%9F%E8%AF%AD-sync-Mutex-%E7%9A%84%E6%89%A9%E5%B1%95%E8%AE%BE%E8%AE%A1/"><i class="fas fa-envelope " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://getpocket.com/save?url=https://def410.github.io/2021/10/17/Go-%E4%B8%AD%E5%90%8C%E6%AD%A5%E5%8E%9F%E8%AF%AD-sync-Mutex-%E7%9A%84%E6%89%A9%E5%B1%95%E8%AE%BE%E8%AE%A1/&title=Go 中同步原语 sync.Mutex 的扩展设计"><i class="fab fa-get-pocket " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://reddit.com/submit?url=https://def410.github.io/2021/10/17/Go-%E4%B8%AD%E5%90%8C%E6%AD%A5%E5%8E%9F%E8%AF%AD-sync-Mutex-%E7%9A%84%E6%89%A9%E5%B1%95%E8%AE%BE%E8%AE%A1/&title=Go 中同步原语 sync.Mutex 的扩展设计"><i class="fab fa-reddit " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.stumbleupon.com/submit?url=https://def410.github.io/2021/10/17/Go-%E4%B8%AD%E5%90%8C%E6%AD%A5%E5%8E%9F%E8%AF%AD-sync-Mutex-%E7%9A%84%E6%89%A9%E5%B1%95%E8%AE%BE%E8%AE%A1/&title=Go 中同步原语 sync.Mutex 的扩展设计"><i class="fab fa-stumbleupon " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://digg.com/submit?url=https://def410.github.io/2021/10/17/Go-%E4%B8%AD%E5%90%8C%E6%AD%A5%E5%8E%9F%E8%AF%AD-sync-Mutex-%E7%9A%84%E6%89%A9%E5%B1%95%E8%AE%BE%E8%AE%A1/&title=Go 中同步原语 sync.Mutex 的扩展设计"><i class="fab fa-digg " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.tumblr.com/share/link?url=https://def410.github.io/2021/10/17/Go-%E4%B8%AD%E5%90%8C%E6%AD%A5%E5%8E%9F%E8%AF%AD-sync-Mutex-%E7%9A%84%E6%89%A9%E5%B1%95%E8%AE%BE%E8%AE%A1/&name=Go 中同步原语 sync.Mutex 的扩展设计&description="><i class="fab fa-tumblr " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://news.ycombinator.com/submitlink?u=https://def410.github.io/2021/10/17/Go-%E4%B8%AD%E5%90%8C%E6%AD%A5%E5%8E%9F%E8%AF%AD-sync-Mutex-%E7%9A%84%E6%89%A9%E5%B1%95%E8%AE%BE%E8%AE%A1/&t=Go 中同步原语 sync.Mutex 的扩展设计"><i class="fab fa-hacker-news " aria-hidden="true"></i></a></li>
+</ul>
+
+    </div>
+    <div id="toc">
+      <ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#0x00-%E4%B8%BA%E4%BB%80%E4%B9%88%E9%9C%80%E8%A6%81%E4%BA%92%E6%96%A5%E9%94%81%EF%BC%9F"><span class="toc-number">1.</span> <span class="toc-text">0x00 - 为什么需要互斥锁？</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x01-sync-Mutex-%E7%9A%84%E4%B8%8D%E8%B6%B3%E4%B9%8B%E5%A4%84"><span class="toc-number">2.</span> <span class="toc-text">0x01 - sync.Mutex 的不足之处</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x02-%E5%8F%AF%E9%87%8D%E5%85%A5%E9%94%81%E7%9A%84%E8%AE%BE%E8%AE%A1"><span class="toc-number">3.</span> <span class="toc-text">0x02 - 可重入锁的设计</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E9%9C%80%E6%B1%82"><span class="toc-number">3.1.</span> <span class="toc-text">需求</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%88%86%E6%9E%90%E4%B8%8E%E8%AE%BE%E8%AE%A1"><span class="toc-number">3.2.</span> <span class="toc-text">分析与设计</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%BB%A3%E7%A0%81%E5%AE%9E%E7%8E%B0"><span class="toc-number">3.3.</span> <span class="toc-text">代码实现</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x03-%E8%8E%B7%E5%8F%96%E4%BA%92%E6%96%A5%E9%94%81%E7%9A%84%E7%8A%B6%E6%80%81"><span class="toc-number">4.</span> <span class="toc-text">0x03 - 获取互斥锁的状态</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E9%9C%80%E6%B1%82-1"><span class="toc-number">4.1.</span> <span class="toc-text">需求</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%88%86%E6%9E%90%E4%B8%8E%E8%AE%BE%E8%AE%A1-1"><span class="toc-number">4.2.</span> <span class="toc-text">分析与设计</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%BB%A3%E7%A0%81%E5%AE%9E%E7%8E%B0-1"><span class="toc-number">4.3.</span> <span class="toc-text">代码实现</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x04-TryLock-%E6%96%B9%E6%B3%95%E7%9A%84%E5%AE%9E%E7%8E%B0"><span class="toc-number">5.</span> <span class="toc-text">0x04 - TryLock 方法的实现</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E9%9C%80%E6%B1%82-2"><span class="toc-number">5.1.</span> <span class="toc-text">需求</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%88%86%E6%9E%90%E4%B8%8E%E8%AE%BE%E8%AE%A1-2"><span class="toc-number">5.2.</span> <span class="toc-text">分析与设计</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%BB%A3%E7%A0%81%E5%AE%9E%E7%8E%B0-2"><span class="toc-number">5.3.</span> <span class="toc-text">代码实现</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x05-%E6%80%BB%E7%BB%93"><span class="toc-number">6.</span> <span class="toc-text">0x05 - 总结</span></a></li></ol>
+    </div>
+  </span>
+</div>
+
+    
+    <div class="content index py4">
+        
+        <article class="post" itemscope itemtype="http://schema.org/BlogPosting">
+  <header>
+    
+    <h1 class="posttitle" itemprop="name headline">
+        Go 中同步原语 sync.Mutex 的扩展设计
+    </h1>
+
+
+
+    <div class="meta">
+      <span class="author" itemprop="author" itemscope itemtype="http://schema.org/Person">
+        <span itemprop="name">def410</span>
+      </span>
+      
+    <div class="postdate">
+      
+        <time datetime="2021-10-17T07:26:18.000Z" itemprop="datePublished">2021-10-17</time>
+        
+      
+    </div>
+
+
+      
+
+      
+    <div class="article-tag">
+        <i class="fas fa-tag"></i>
+        <a class="tag-link-link" href="/tags/Go/" rel="tag">Go</a>, <a class="tag-link-link" href="/tags/%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B/" rel="tag">并发编程</a>
+    </div>
+
+
+    </div>
+  </header>
+  
+
+  <div class="content" itemprop="articleBody">
+    <h2 id="0x00-为什么需要互斥锁？"><a href="#0x00-为什么需要互斥锁？" class="headerlink" title="0x00 - 为什么需要互斥锁？"></a>0x00 - 为什么需要互斥锁？</h2><p>互斥锁是一种同步工具，在 Go 中，它可以保证同一时刻只有一个 Goroutine 进入临界区，访问共享资源时不被其他 Goroutine 打扰。</p>
+<p>Go 语言标准库中提供了 sync.Mutex 这个同步原语，实现了互斥锁的功能，使用起来也非常简单，用 Lock() 和 TryLock() 两个方法就可以完成“上锁”和“解锁”的操作。同时，sync 包中还实现了读写锁 sync.RWMutex，对共享资源的读操作和写操作区别对待，在有大量读操作和少量写操作的并发场景下，读写锁的性能明显比互斥锁更高。</p>
+<h2 id="0x01-sync-Mutex-的不足之处"><a href="#0x01-sync-Mutex-的不足之处" class="headerlink" title="0x01 - sync.Mutex 的不足之处"></a>0x01 - sync.Mutex 的不足之处</h2><p>sync.Mutex 这个类型是“开箱即用”的，使用起来非常简单，当然也有它的不足之处，比如：</p>
+<ol>
+<li>在某些时候我们需要使用可重入锁，而 sync.Mutex 没有实现可重入的功能。</li>
+<li>sync.Mutex 这个结构体类型的内部字段中没有记录持有锁的 Goroutine 的 ID ，因此 Groutine A 上的锁可能被 Goroutine B 解开，在一些场景下，我们不希望这样的事情发生。</li>
+<li>有时，我们在无法获取锁时，希望能立即得到一个获取失败的返回结果，然后去做别的事情，而不是一直阻塞，这就需要一个 TryLock 的方法来实现。</li>
+<li> sync.Mutex 没有暴露锁的状态信息，我们无法得知这个锁当前是否被持有，以及当前有多少 Goroutine 因这把锁而阻塞。</li>
+</ol>
+<h2 id="0x02-可重入锁的设计"><a href="#0x02-可重入锁的设计" class="headerlink" title="0x02 - 可重入锁的设计"></a>0x02 - 可重入锁的设计</h2><h3 id="需求"><a href="#需求" class="headerlink" title="需求"></a>需求</h3><p>基于 sync.Mutex 设计一个可重入锁，同一个 Goroutine 可以重复上锁，并且锁只能被持有它的 Groutine 解开。</p>
+<h3 id="分析与设计"><a href="#分析与设计" class="headerlink" title="分析与设计"></a>分析与设计</h3><ol>
+<li>定义一个结构体类型，嵌入 sync.Mutex 并添加两个字段分别记录持有锁的 Goroutine ID（属主信息） 和重入次数。</li>
+<li>为其实现 Lock 方法，如果是持有锁的 Goroutine 请求上锁，则记录重入次数并返回；否则调用嵌入的 Mutex 的 Lock 方法，成功上锁后记录属主信息，刷新重入次数并返回。</li>
+<li>实现 UnLock 方法，若当前 Goroutine 未持有锁，则不允许解锁；否则将其重入次数 - 1，重入次数为 0 时则调用嵌入的 Mutex 的 UnLock 方法，彻底释放锁并清除属主信息。</li>
+</ol>
+<h3 id="代码实现"><a href="#代码实现" class="headerlink" title="代码实现"></a>代码实现</h3><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">package</span> lock</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> (</span><br><span class="line">	<span class="string">&quot;fmt&quot;</span></span><br><span class="line">	<span class="string">&quot;runtime&quot;</span></span><br><span class="line">	<span class="string">&quot;strconv&quot;</span></span><br><span class="line">	<span class="string">&quot;strings&quot;</span></span><br><span class="line">	<span class="string">&quot;sync&quot;</span></span><br><span class="line">	<span class="string">&quot;sync/atomic&quot;</span></span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="keyword">type</span> RecursiveMutex <span class="keyword">struct</span> &#123;</span><br><span class="line">	sync.Mutex</span><br><span class="line">	owner     <span class="keyword">int64</span> <span class="comment">// 拥有锁的 goroutine 的 id</span></span><br><span class="line">	recursion <span class="keyword">int32</span> <span class="comment">// 拥有锁的 goroutine 的 重入次数</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(m *RecursiveMutex)</span> <span class="title">Lock</span><span class="params">()</span></span> &#123;</span><br><span class="line">	id := <span class="keyword">int64</span>(goid())</span><br><span class="line">	<span class="comment">// 如果请求锁的 goroutine 是当前拥有锁的 goroutine，则只记录重入次数，并返回</span></span><br><span class="line">	<span class="keyword">if</span> atomic.LoadInt64(&amp;m.owner) == id &#123;</span><br><span class="line">		m.recursion++</span><br><span class="line">		<span class="keyword">return</span></span><br><span class="line">	&#125;</span><br><span class="line">	<span class="comment">// 否则当前请求锁的 goroutine 阻塞，直到获得锁</span></span><br><span class="line">	m.Mutex.Lock()</span><br><span class="line">	<span class="comment">// 记录 goroutine id</span></span><br><span class="line">	atomic.StoreInt64(&amp;m.owner, id)</span><br><span class="line">	<span class="comment">// 重入次数设为 1</span></span><br><span class="line">	m.recursion = <span class="number">1</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(m *RecursiveMutex)</span> <span class="title">Unlock</span><span class="params">()</span></span> &#123;</span><br><span class="line">	id := <span class="keyword">int64</span>(goid())</span><br><span class="line">	<span class="comment">// 当前 goroutine 未拥有锁，则不允许解锁</span></span><br><span class="line">	<span class="keyword">if</span> atomic.LoadInt64(&amp;m.owner) != id &#123;</span><br><span class="line">		<span class="built_in">panic</span>(fmt.Sprintf(<span class="string">&quot;RecursiveMutex: A goroutine that does not own the lock attempts to unlock&quot;</span>))</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="comment">// 如果是拥有锁的 goroutine，则将重入次数减 1</span></span><br><span class="line">	m.recursion--</span><br><span class="line">	<span class="comment">// 如果是最后一次释放锁，则清除属主信息,并释放锁</span></span><br><span class="line">	<span class="keyword">if</span> m.recursion == <span class="number">0</span> &#123;</span><br><span class="line">		atomic.StoreInt64(&amp;m.owner, <span class="number">-1</span>)</span><br><span class="line">		m.Mutex.Unlock()</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 通过 runtime.Stack 方法获取当前 goroutine 的栈帧信息，取出其中包含的 goroutine id</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">goid</span><span class="params">()</span> <span class="title">int</span></span> &#123;</span><br><span class="line">	buf := <span class="built_in">make</span>([]<span class="keyword">byte</span>, <span class="number">32</span>)</span><br><span class="line">	l := runtime.Stack(buf, <span class="literal">false</span>)</span><br><span class="line">	idField := strings.Fields(strings.TrimPrefix(<span class="keyword">string</span>(buf[:l]), <span class="string">&quot;goroutine &quot;</span>))</span><br><span class="line">	id, err := strconv.Atoi(idField[<span class="number">0</span>])</span><br><span class="line">	<span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">		<span class="built_in">panic</span>(fmt.Sprintf(<span class="string">&quot;goid: can not to get the id of current goroutine: err&quot;</span>))</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> id</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="0x03-获取互斥锁的状态"><a href="#0x03-获取互斥锁的状态" class="headerlink" title="0x03 - 获取互斥锁的状态"></a>0x03 - 获取互斥锁的状态</h2><h3 id="需求-1"><a href="#需求-1" class="headerlink" title="需求"></a>需求</h3><p>我们希望能获取互斥锁当前的状态信息，包括：</p>
+<ol>
+<li>锁是否被持有</li>
+<li>是否处于饥饿状态</li>
+<li>是否有被唤醒的 Goroutine</li>
+<li>持有锁和因这把锁而阻塞的 Goroutine 数</li>
+</ol>
+<h3 id="分析与设计-1"><a href="#分析与设计-1" class="headerlink" title="分析与设计"></a>分析与设计</h3><p>要想获取这些信息，就不得不了解 sync.Mutex 内部字段的含义。</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> Mutex <span class="keyword">struct</span> &#123;</span><br><span class="line">	state <span class="keyword">int32</span></span><br><span class="line">	sema  <span class="keyword">uint32</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>sync.Mutex 具有两个字段，其中 sema 字段表示信号量。state字段是一个复合字段，它使用不同的二进制位来表示多种信息，将其转为二进制，然后从右往左看，分别代表如下含义：</p>
+<ol>
+<li>第 1位：标记锁是否被持有</li>
+<li>第 2位：标记是否有唤醒的 groutine</li>
+<li>第 3位：标记是否处于饥饿状态</li>
+<li>剩余位：标记等待当前锁的 groutine数量</li>
+</ol>
+<p>因此，如果能取到 state 字段的值，也就可以获取到锁的状态信息。</p>
+<ul>
+<li>取 state 字段的值  state 是 sync.Mutex 的第一个字段，一个 sync.Mutex 类型的值在内存中起始位置，就是指向的就是 sync.Mutex 的 state 字段的指针，这个指针可以通过 unsafe.Pointer() 方法来获取。</li>
+<li>判断锁的状态  取得 state 的值后，通过按位与运算，就可以知道 state 值转换成二进制后，每一位上是 0 还是 1，这样我们也就拿到了锁的状态信息！</li>
+</ul>
+<h3 id="代码实现-1"><a href="#代码实现-1" class="headerlink" title="代码实现"></a>代码实现</h3><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">package</span> lock</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> (</span><br><span class="line">	<span class="string">&quot;sync&quot;</span></span><br><span class="line">	<span class="string">&quot;sync/atomic&quot;</span></span><br><span class="line">	<span class="string">&quot;unsafe&quot;</span></span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="comment">// 定义与 sync 包中对应的常量，方便后续进行位运算</span></span><br><span class="line"><span class="keyword">const</span> (</span><br><span class="line">	mutexLocked      = <span class="number">1</span> &lt;&lt; <span class="literal">iota</span> <span class="comment">// 表示锁被持有，值为 bin(1)</span></span><br><span class="line">	mutexWoken                   <span class="comment">// 标记是否有被唤醒的 goroutine，值为 bin(10)</span></span><br><span class="line">	mutexStarving                <span class="comment">// 标记是否处于饥饿状态，值为 bin(100)</span></span><br><span class="line">	mutexWaiterShift = <span class="literal">iota</span>      <span class="comment">// 标记 记录“等待者数量”的 bits 的起始位置，值为 3</span></span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="keyword">type</span> MonitorMutex <span class="keyword">struct</span> &#123;</span><br><span class="line">	sync.Mutex</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 返回持有锁的 goroutine 和 等待锁的 goroutine 的总数</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(m *MonitorMutex)</span> <span class="title">Count</span><span class="params">()</span> <span class="title">int</span></span> &#123;</span><br><span class="line">	<span class="comment">// m.Mutex 在内存中起始位置，就是指向的就是 sync.Mutex 的 state 字段的指针</span></span><br><span class="line">	n := atomic.LoadInt32((*<span class="keyword">int32</span>)(unsafe.Pointer(&amp;m.Mutex)))</span><br><span class="line">	<span class="comment">// 右移，获取等待者数量</span></span><br><span class="line">	n = n &gt;&gt; mutexWaiterShift</span><br><span class="line">	<span class="comment">// 如果当前的锁被持有，则 + 1</span></span><br><span class="line">	n += n &amp; mutexLocked</span><br><span class="line">	<span class="keyword">return</span> <span class="keyword">int</span>(n)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 判断锁是否处于某个状态，获取到的状态只是一个瞬态的值，函数返回前可能就发生了变化</span></span><br><span class="line"><span class="comment">// 锁是否被持有？</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(m *MonitorMutex)</span> <span class="title">IsLocked</span><span class="params">()</span> <span class="title">bool</span></span> &#123;</span><br><span class="line">	n := atomic.LoadInt32((*<span class="keyword">int32</span>)(unsafe.Pointer(&amp;m.Mutex)))</span><br><span class="line">	n = n &amp; mutexLocked</span><br><span class="line">	<span class="keyword">return</span> n == mutexLocked</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 有被唤醒的 goroutine？</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(m *MonitorMutex)</span> <span class="title">IsWoken</span><span class="params">()</span> <span class="title">bool</span></span> &#123;</span><br><span class="line">	n := atomic.LoadInt32((*<span class="keyword">int32</span>)(unsafe.Pointer(&amp;m.Mutex)))</span><br><span class="line">	n = n &amp; mutexWoken</span><br><span class="line">	<span class="keyword">return</span> n == mutexWoken</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 处于饥饿状态？</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(m *MonitorMutex)</span> <span class="title">IsStarving</span><span class="params">()</span> <span class="title">bool</span></span> &#123;</span><br><span class="line">	n := atomic.LoadInt32((*<span class="keyword">int32</span>)(unsafe.Pointer(&amp;m.Mutex)))</span><br><span class="line">	n = n &amp; mutexStarving</span><br><span class="line">	<span class="keyword">return</span> n == mutexStarving</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="0x04-TryLock-方法的实现"><a href="#0x04-TryLock-方法的实现" class="headerlink" title="0x04 - TryLock 方法的实现"></a>0x04 - TryLock 方法的实现</h2><h3 id="需求-2"><a href="#需求-2" class="headerlink" title="需求"></a>需求</h3><p>实现 TryLock 方法，如果成功获得锁则返回 true，否则立即返回 false ，而不是阻塞。</p>
+<h3 id="分析与设计-2"><a href="#分析与设计-2" class="headerlink" title="分析与设计"></a>分析与设计</h3><p>要实现 TryLock方法，我们还要利用刚刚分析过的 state 字段，通过 state 值来获取锁的状态，在不满足要求时返回 false，在满足要求时通过更改 state 值来对 Mutex 上锁。</p>
+<ol>
+<li>调用 atomic 包中的 CAS 方法，若 state 值为 0 且成功赋值为 1 后，返回上锁成功。</li>
+<li>否则获取 state 值，进行位运算，分析锁的状态，如果锁处于饥饿、唤醒、锁定状态，则返回 false。</li>
+<li>如果未处于这三种状态，则表明这把锁未锁定，且有其他 Goroutine 在竞争，则使用 CAS 操作尝试修改 state 值，返回是否修改成功（是否成功上锁）。</li>
+</ol>
+<h3 id="代码实现-2"><a href="#代码实现-2" class="headerlink" title="代码实现"></a>代码实现</h3><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">package</span> lock</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> (</span><br><span class="line">	<span class="string">&quot;sync&quot;</span></span><br><span class="line">	<span class="string">&quot;sync/atomic&quot;</span></span><br><span class="line">	<span class="string">&quot;unsafe&quot;</span></span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="keyword">const</span> (</span><br><span class="line">	mutexLocked = <span class="number">1</span> &lt;&lt; <span class="literal">iota</span> <span class="comment">// 表示锁被持有</span></span><br><span class="line">	mutexWoken <span class="comment">// 标记是否有被唤醒的 goroutine</span></span><br><span class="line">	mutexStarving <span class="comment">// 标记是否处于饥饿状态</span></span><br><span class="line">	mutexWaiterShift = <span class="literal">iota</span> <span class="comment">// 标记 记录“等待者数量”的 bits 的起始位置</span></span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="keyword">type</span> TryLockMutex <span class="keyword">struct</span> &#123;</span><br><span class="line">	sync.Mutex</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 操纵 sync.Mutex 的 state 字段来实现 TryLock 方法</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(m *TryLockMutex)</span> <span class="title">TryLock</span><span class="params">()</span> <span class="title">bool</span></span> &#123;</span><br><span class="line">	<span class="comment">// 如果成功获得锁，则返回 true</span></span><br><span class="line">	<span class="keyword">if</span> atomic.CompareAndSwapInt32((*<span class="keyword">int32</span>)(unsafe.Pointer(&amp;m.Mutex)), <span class="number">0</span>, mutexLocked) &#123;</span><br><span class="line">		<span class="keyword">return</span> <span class="literal">true</span></span><br><span class="line">	&#125;</span><br><span class="line">	<span class="comment">// 如果锁处于饥饿、唤醒、锁定状态，返回 false</span></span><br><span class="line">	old := atomic.LoadInt32((*<span class="keyword">int32</span>)(unsafe.Pointer(&amp;m.Mutex)))</span><br><span class="line">	<span class="keyword">if</span> old&amp;(mutexLocked|mutexWoken|mutexStarving) != <span class="number">0</span> &#123;</span><br><span class="line">		<span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">	&#125;</span><br><span class="line">	<span class="comment">// 否则当前的锁的状态为“未锁定”，并且有其他 goroutine 竞争这把锁。则当前 goroutine 也尝试竞争。</span></span><br><span class="line">	<span class="built_in">new</span> := old | mutexLocked</span><br><span class="line">	<span class="keyword">return</span> atomic.CompareAndSwapInt32((*<span class="keyword">int32</span>)(unsafe.Pointer(&amp;m.Mutex)), old, <span class="built_in">new</span>)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="0x05-总结"><a href="#0x05-总结" class="headerlink" title="0x05 - 总结"></a>0x05 - 总结</h2><p>在某些并发场景中，我们需要可重入锁，以及具有 TryLock 方法的互斥锁，在 Go 标准库中的 sync.Mutex 类型基础上，我们可以很容易的进行扩展，这既能满足我们的需求，也能加深我们对 sync.Mutex 类型的理解。</p>
+<p>锁是导致性能下降的万恶之源，通过获取锁的内部状态，我们可以在程序运行的某些时刻记录下“被某把锁阻塞的 Goroutine 数”，进而对程序性能问题进行分析、定位以及优化。</p>
+
+  </div>
+</article>
+
+
+
+        
+          <div id="footer-post-container">
+  <div id="footer-post">
+
+    <div id="nav-footer" style="display: none">
+      <ul>
+         
+          <li><a href="/">/home</a></li>
+         
+          <li><a href="/archives/">/articles</a></li>
+        
+      </ul>
+    </div>
+
+    <div id="toc-footer" style="display: none">
+      <ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#0x00-%E4%B8%BA%E4%BB%80%E4%B9%88%E9%9C%80%E8%A6%81%E4%BA%92%E6%96%A5%E9%94%81%EF%BC%9F"><span class="toc-number">1.</span> <span class="toc-text">0x00 - 为什么需要互斥锁？</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x01-sync-Mutex-%E7%9A%84%E4%B8%8D%E8%B6%B3%E4%B9%8B%E5%A4%84"><span class="toc-number">2.</span> <span class="toc-text">0x01 - sync.Mutex 的不足之处</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x02-%E5%8F%AF%E9%87%8D%E5%85%A5%E9%94%81%E7%9A%84%E8%AE%BE%E8%AE%A1"><span class="toc-number">3.</span> <span class="toc-text">0x02 - 可重入锁的设计</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E9%9C%80%E6%B1%82"><span class="toc-number">3.1.</span> <span class="toc-text">需求</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%88%86%E6%9E%90%E4%B8%8E%E8%AE%BE%E8%AE%A1"><span class="toc-number">3.2.</span> <span class="toc-text">分析与设计</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%BB%A3%E7%A0%81%E5%AE%9E%E7%8E%B0"><span class="toc-number">3.3.</span> <span class="toc-text">代码实现</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x03-%E8%8E%B7%E5%8F%96%E4%BA%92%E6%96%A5%E9%94%81%E7%9A%84%E7%8A%B6%E6%80%81"><span class="toc-number">4.</span> <span class="toc-text">0x03 - 获取互斥锁的状态</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E9%9C%80%E6%B1%82-1"><span class="toc-number">4.1.</span> <span class="toc-text">需求</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%88%86%E6%9E%90%E4%B8%8E%E8%AE%BE%E8%AE%A1-1"><span class="toc-number">4.2.</span> <span class="toc-text">分析与设计</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%BB%A3%E7%A0%81%E5%AE%9E%E7%8E%B0-1"><span class="toc-number">4.3.</span> <span class="toc-text">代码实现</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x04-TryLock-%E6%96%B9%E6%B3%95%E7%9A%84%E5%AE%9E%E7%8E%B0"><span class="toc-number">5.</span> <span class="toc-text">0x04 - TryLock 方法的实现</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E9%9C%80%E6%B1%82-2"><span class="toc-number">5.1.</span> <span class="toc-text">需求</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%88%86%E6%9E%90%E4%B8%8E%E8%AE%BE%E8%AE%A1-2"><span class="toc-number">5.2.</span> <span class="toc-text">分析与设计</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%BB%A3%E7%A0%81%E5%AE%9E%E7%8E%B0-2"><span class="toc-number">5.3.</span> <span class="toc-text">代码实现</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x05-%E6%80%BB%E7%BB%93"><span class="toc-number">6.</span> <span class="toc-text">0x05 - 总结</span></a></li></ol>
+    </div>
+
+    <div id="share-footer" style="display: none">
+      <ul>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.facebook.com/sharer.php?u=https://def410.github.io/2021/10/17/Go-%E4%B8%AD%E5%90%8C%E6%AD%A5%E5%8E%9F%E8%AF%AD-sync-Mutex-%E7%9A%84%E6%89%A9%E5%B1%95%E8%AE%BE%E8%AE%A1/"><i class="fab fa-facebook fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://twitter.com/share?url=https://def410.github.io/2021/10/17/Go-%E4%B8%AD%E5%90%8C%E6%AD%A5%E5%8E%9F%E8%AF%AD-sync-Mutex-%E7%9A%84%E6%89%A9%E5%B1%95%E8%AE%BE%E8%AE%A1/&text=Go 中同步原语 sync.Mutex 的扩展设计"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.linkedin.com/shareArticle?url=https://def410.github.io/2021/10/17/Go-%E4%B8%AD%E5%90%8C%E6%AD%A5%E5%8E%9F%E8%AF%AD-sync-Mutex-%E7%9A%84%E6%89%A9%E5%B1%95%E8%AE%BE%E8%AE%A1/&title=Go 中同步原语 sync.Mutex 的扩展设计"><i class="fab fa-linkedin fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://pinterest.com/pin/create/bookmarklet/?url=https://def410.github.io/2021/10/17/Go-%E4%B8%AD%E5%90%8C%E6%AD%A5%E5%8E%9F%E8%AF%AD-sync-Mutex-%E7%9A%84%E6%89%A9%E5%B1%95%E8%AE%BE%E8%AE%A1/&is_video=false&description=Go 中同步原语 sync.Mutex 的扩展设计"><i class="fab fa-pinterest fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" href="mailto:?subject=Go 中同步原语 sync.Mutex 的扩展设计&body=Check out this article: https://def410.github.io/2021/10/17/Go-%E4%B8%AD%E5%90%8C%E6%AD%A5%E5%8E%9F%E8%AF%AD-sync-Mutex-%E7%9A%84%E6%89%A9%E5%B1%95%E8%AE%BE%E8%AE%A1/"><i class="fas fa-envelope fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://getpocket.com/save?url=https://def410.github.io/2021/10/17/Go-%E4%B8%AD%E5%90%8C%E6%AD%A5%E5%8E%9F%E8%AF%AD-sync-Mutex-%E7%9A%84%E6%89%A9%E5%B1%95%E8%AE%BE%E8%AE%A1/&title=Go 中同步原语 sync.Mutex 的扩展设计"><i class="fab fa-get-pocket fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://reddit.com/submit?url=https://def410.github.io/2021/10/17/Go-%E4%B8%AD%E5%90%8C%E6%AD%A5%E5%8E%9F%E8%AF%AD-sync-Mutex-%E7%9A%84%E6%89%A9%E5%B1%95%E8%AE%BE%E8%AE%A1/&title=Go 中同步原语 sync.Mutex 的扩展设计"><i class="fab fa-reddit fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.stumbleupon.com/submit?url=https://def410.github.io/2021/10/17/Go-%E4%B8%AD%E5%90%8C%E6%AD%A5%E5%8E%9F%E8%AF%AD-sync-Mutex-%E7%9A%84%E6%89%A9%E5%B1%95%E8%AE%BE%E8%AE%A1/&title=Go 中同步原语 sync.Mutex 的扩展设计"><i class="fab fa-stumbleupon fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://digg.com/submit?url=https://def410.github.io/2021/10/17/Go-%E4%B8%AD%E5%90%8C%E6%AD%A5%E5%8E%9F%E8%AF%AD-sync-Mutex-%E7%9A%84%E6%89%A9%E5%B1%95%E8%AE%BE%E8%AE%A1/&title=Go 中同步原语 sync.Mutex 的扩展设计"><i class="fab fa-digg fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.tumblr.com/share/link?url=https://def410.github.io/2021/10/17/Go-%E4%B8%AD%E5%90%8C%E6%AD%A5%E5%8E%9F%E8%AF%AD-sync-Mutex-%E7%9A%84%E6%89%A9%E5%B1%95%E8%AE%BE%E8%AE%A1/&name=Go 中同步原语 sync.Mutex 的扩展设计&description="><i class="fab fa-tumblr fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://news.ycombinator.com/submitlink?u=https://def410.github.io/2021/10/17/Go-%E4%B8%AD%E5%90%8C%E6%AD%A5%E5%8E%9F%E8%AF%AD-sync-Mutex-%E7%9A%84%E6%89%A9%E5%B1%95%E8%AE%BE%E8%AE%A1/&t=Go 中同步原语 sync.Mutex 的扩展设计"><i class="fab fa-hacker-news fa-lg" aria-hidden="true"></i></a></li>
+</ul>
+
+    </div>
+
+    <div id="actions-footer">
+        <a id="menu" class="icon" href="#" onclick="$('#nav-footer').toggle();return false;"><i class="fas fa-bars fa-lg" aria-hidden="true"></i> Menu</a>
+        <a id="toc" class="icon" href="#" onclick="$('#toc-footer').toggle();return false;"><i class="fas fa-list fa-lg" aria-hidden="true"></i> TOC</a>
+        <a id="share" class="icon" href="#" onclick="$('#share-footer').toggle();return false;"><i class="fas fa-share-alt fa-lg" aria-hidden="true"></i> Share</a>
+        <a id="top" style="display:none" class="icon" href="#" onclick="$('html, body').animate({ scrollTop: 0 }, 'fast');"><i class="fas fa-chevron-up fa-lg" aria-hidden="true"></i> Top</a>
+    </div>
+
+  </div>
+</div>
+
+        
+        <footer id="footer">
+  <div class="footer-left">
+    Copyright &copy;
+    
+    
+    2016-2021
+    def410
+  </div>
+  <div class="footer-right">
+    <nav>
+      <ul>
+         
+          <li><a href="/">/home</a></li>
+         
+          <li><a href="/archives/">/articles</a></li>
+        
+      </ul>
+    </nav>
+  </div>
+</footer>
+
+    </div>
+    <!-- styles -->
+
+
+
+  <link rel="preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css" crossorigin="anonymous" onload="this.onload=null;this.rel='stylesheet'"/>
+
+
+    <!-- jquery -->
+ 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js" crossorigin="anonymous"></script> 
+
+
+
+
+<!-- clipboard -->
+
+  
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.7/clipboard.min.js" crossorigin="anonymous"></script> 
+  
+  <script type="text/javascript">
+  $(function() {
+    // copy-btn HTML
+    var btn = "<span class=\"btn-copy tooltipped tooltipped-sw\" aria-label=\"Copy to clipboard!\">";
+    btn += '<i class="far fa-clone"></i>';
+    btn += '</span>'; 
+    // mount it!
+    $(".highlight table").before(btn);
+    var clip = new ClipboardJS('.btn-copy', {
+      text: function(trigger) {
+        return Array.from(trigger.nextElementSibling.querySelectorAll('.code')).reduce((str,it)=>str+it.innerText+'\n','')
+      }
+    });
+    clip.on('success', function(e) {
+      e.trigger.setAttribute('aria-label', "Copied!");
+      e.clearSelection();
+    })
+  })
+  </script>
+
+
+<script src="/js/main.js"></script>
+
+<!-- search -->
+
+<!-- Google Analytics -->
+
+<!-- Baidu Analytics -->
+
+<!-- Cloudflare Analytics -->
+
+<!-- Umami Analytics -->
+
+<!-- Disqus Comments -->
+
+
+</body>
+</html>

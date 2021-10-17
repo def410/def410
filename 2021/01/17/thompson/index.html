@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang=en>
+<head>
+    <!-- so meta -->
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="HandheldFriendly" content="True">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5" />
+    <meta name="description" content="0x00 - Port ScanUse Nmap to scan the target host’s ports  Three ports are opened on the target, I use searchsploit to find vulnerabilities in tomcat  I tested the remote code execution exploit, but it">
+<meta property="og:type" content="article">
+<meta property="og:title" content="tryhackme walkthrough - thompson">
+<meta property="og:url" content="https://def410.github.io/2021/01/17/thompson/index.html">
+<meta property="og:site_name" content="def410&#39;s blog">
+<meta property="og:description" content="0x00 - Port ScanUse Nmap to scan the target host’s ports  Three ports are opened on the target, I use searchsploit to find vulnerabilities in tomcat  I tested the remote code execution exploit, but it">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://def410.github.io/2021/01/17/thompson/Untitled.png">
+<meta property="og:image" content="https://def410.github.io/2021/01/17/thompson/Untitled1.png">
+<meta property="og:image" content="https://def410.github.io/2021/01/17/thompson/Untitled2.png">
+<meta property="og:image" content="https://def410.github.io/2021/01/17/thompson/Untitled3.png">
+<meta property="og:image" content="https://def410.github.io/2021/01/17/thompson/Untitled4.png">
+<meta property="og:image" content="https://def410.github.io/2021/01/17/thompson/Untitled5.png">
+<meta property="og:image" content="https://def410.github.io/2021/01/17/thompson/Untitled6.png">
+<meta property="og:image" content="https://def410.github.io/2021/01/17/thompson/Untitled7.png">
+<meta property="og:image" content="https://def410.github.io/2021/01/17/thompson/Untitled8.png">
+<meta property="og:image" content="https://def410.github.io/2021/01/17/thompson/Untitled9.png">
+<meta property="article:published_time" content="2021-01-16T16:00:00.000Z">
+<meta property="article:modified_time" content="2021-10-16T13:45:42.686Z">
+<meta property="article:author" content="def410">
+<meta property="article:tag" content="pentest">
+<meta property="article:tag" content="walkthrough">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://def410.github.io/2021/01/17/thompson/Untitled.png">
+    
+    
+      
+        
+          <link rel="shortcut icon" href="/images/favicon.ico">
+        
+      
+      
+        
+          <link rel="icon" type="image/png" href="/images/favicon-192x192.png" sizes="192x192">
+        
+      
+      
+        
+          <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
+        
+      
+    
+    <!-- title -->
+    <title>tryhackme walkthrough - thompson</title>
+    <!-- styles -->
+    
+<link rel="stylesheet" href="/css/style.css">
+
+    <!-- persian styles -->
+    
+    <!-- rss -->
+    
+    
+	<!-- mathjax -->
+	
+<meta name="generator" content="Hexo 5.4.0"></head>
+
+<body class="max-width mx-auto px3 ltr">
+    
+      <div id="header-post">
+  <a id="menu-icon" href="#" aria-label="Menu"><i class="fas fa-bars fa-lg"></i></a>
+  <a id="menu-icon-tablet" href="#" aria-label="Menu"><i class="fas fa-bars fa-lg"></i></a>
+  <a id="top-icon-tablet" href="#" "Top" onclick="$('html, body').animate({ scrollTop: 0 }, 'fast');" style="display:none;"><i class="fas fa-chevron-up fa-lg"></i></a>
+  <span id="menu">
+    <span id="nav">
+      <ul>
+         
+          <li><a href="/">/home</a></li>
+         
+          <li><a href="/archives/">/articles</a></li>
+        
+      </ul>
+    </span>
+    <br/>
+    <span id="actions">
+      <ul>
+        
+        <li><a class="icon" aria-label="Previous post " href="/2021/10/17/Go-%E4%B8%AD%E5%90%8C%E6%AD%A5%E5%8E%9F%E8%AF%AD-sync-Mutex-%E7%9A%84%E6%89%A9%E5%B1%95%E8%AE%BE%E8%AE%A1/"><i class="fas fa-chevron-left" aria-hidden="true" onmouseover="$('#i-prev').toggle();" onmouseout="$('#i-prev').toggle();"></i></a></li>
+        
+        
+        <li><a class="icon" aria-label="Next post " href="/2020/12/14/anonymous-v6/"><i class="fas fa-chevron-right" aria-hidden="true" onmouseover="$('#i-next').toggle();" onmouseout="$('#i-next').toggle();"></i></a></li>
+        
+        <li><a class="icon" aria-label="Back to top " href="#" onclick="$('html, body').animate({ scrollTop: 0 }, 'fast');"><i class="fas fa-chevron-up" aria-hidden="true" onmouseover="$('#i-top').toggle();" onmouseout="$('#i-top').toggle();"></i></a></li>
+        <li><a class="icon" aria-label="Share post " href="#"><i class="fas fa-share-alt" aria-hidden="true" onmouseover="$('#i-share').toggle();" onmouseout="$('#i-share').toggle();" onclick="$('#share').toggle();return false;"></i></a></li>
+      </ul>
+      <span id="i-prev" class="info" style="display:none;">Previous post</span>
+      <span id="i-next" class="info" style="display:none;">Next post</span>
+      <span id="i-top" class="info" style="display:none;">Back to top</span>
+      <span id="i-share" class="info" style="display:none;">Share post</span>
+    </span>
+    <br/>
+    <div id="share" style="display: none">
+      <ul>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.facebook.com/sharer.php?u=https://def410.github.io/2021/01/17/thompson/"><i class="fab fa-facebook " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://twitter.com/share?url=https://def410.github.io/2021/01/17/thompson/&text=tryhackme walkthrough - thompson"><i class="fab fa-twitter " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.linkedin.com/shareArticle?url=https://def410.github.io/2021/01/17/thompson/&title=tryhackme walkthrough - thompson"><i class="fab fa-linkedin " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://pinterest.com/pin/create/bookmarklet/?url=https://def410.github.io/2021/01/17/thompson/&is_video=false&description=tryhackme walkthrough - thompson"><i class="fab fa-pinterest " aria-hidden="true"></i></a></li>
+  <li><a class="icon" href="mailto:?subject=tryhackme walkthrough - thompson&body=Check out this article: https://def410.github.io/2021/01/17/thompson/"><i class="fas fa-envelope " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://getpocket.com/save?url=https://def410.github.io/2021/01/17/thompson/&title=tryhackme walkthrough - thompson"><i class="fab fa-get-pocket " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://reddit.com/submit?url=https://def410.github.io/2021/01/17/thompson/&title=tryhackme walkthrough - thompson"><i class="fab fa-reddit " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.stumbleupon.com/submit?url=https://def410.github.io/2021/01/17/thompson/&title=tryhackme walkthrough - thompson"><i class="fab fa-stumbleupon " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://digg.com/submit?url=https://def410.github.io/2021/01/17/thompson/&title=tryhackme walkthrough - thompson"><i class="fab fa-digg " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.tumblr.com/share/link?url=https://def410.github.io/2021/01/17/thompson/&name=tryhackme walkthrough - thompson&description="><i class="fab fa-tumblr " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://news.ycombinator.com/submitlink?u=https://def410.github.io/2021/01/17/thompson/&t=tryhackme walkthrough - thompson"><i class="fab fa-hacker-news " aria-hidden="true"></i></a></li>
+</ul>
+
+    </div>
+    <div id="toc">
+      <ol class="toc"><li class="toc-item toc-level-3"><a class="toc-link" href="#0x00-Port-Scan"><span class="toc-number">1.</span> <span class="toc-text">0x00 - Port Scan</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#0x01-Web"><span class="toc-number">2.</span> <span class="toc-text">0x01 - Web</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#0x02-Upload-Webshell"><span class="toc-number">3.</span> <span class="toc-text">0x02 - Upload Webshell</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#0x03-Get-User-Shell"><span class="toc-number">4.</span> <span class="toc-text">0x03 - Get User Shell</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#0x04-Privilege-Escalation"><span class="toc-number">5.</span> <span class="toc-text">0x04 - Privilege Escalation</span></a></li></ol>
+    </div>
+  </span>
+</div>
+
+    
+    <div class="content index py4">
+        
+        <article class="post" itemscope itemtype="http://schema.org/BlogPosting">
+  <header>
+    
+    <h1 class="posttitle" itemprop="name headline">
+        tryhackme walkthrough - thompson
+    </h1>
+
+
+
+    <div class="meta">
+      <span class="author" itemprop="author" itemscope itemtype="http://schema.org/Person">
+        <span itemprop="name">def410</span>
+      </span>
+      
+    <div class="postdate">
+      
+        <time datetime="2021-01-16T16:00:00.000Z" itemprop="datePublished">2021-01-17</time>
+        
+      
+    </div>
+
+
+      
+
+      
+    <div class="article-tag">
+        <i class="fas fa-tag"></i>
+        <a class="tag-link-link" href="/tags/pentest/" rel="tag">pentest</a>, <a class="tag-link-link" href="/tags/walkthrough/" rel="tag">walkthrough</a>
+    </div>
+
+
+    </div>
+  </header>
+  
+
+  <div class="content" itemprop="articleBody">
+    <h3 id="0x00-Port-Scan"><a href="#0x00-Port-Scan" class="headerlink" title="0x00 - Port Scan"></a>0x00 - Port Scan</h3><p>Use Nmap to scan the target host’s ports</p>
+<p><img src="Untitled.png"></p>
+<p>Three ports are opened on the target, I use searchsploit to find vulnerabilities in tomcat</p>
+<p><img src="Untitled1.png"></p>
+<p>I tested the remote code execution exploit, but it didn’t work.</p>
+<h3 id="0x01-Web"><a href="#0x01-Web" class="headerlink" title="0x01 - Web"></a>0x01 - Web</h3><p>Visit the website, the page also has an application manager, I tested some usernames and passwords, no success, but I found this message</p>
+<p><img src="Untitled2.png"></p>
+<p>I used “tomcat” as the user name and “s3cret” as the password to log in to the application manager, and the login was successful!</p>
+<h3 id="0x02-Upload-Webshell"><a href="#0x02-Upload-Webshell" class="headerlink" title="0x02 - Upload Webshell"></a>0x02 - Upload Webshell</h3><p>In the application manager, there is an upload button that allows us to upload waf files.</p>
+<p><img src="Untitled3.png"></p>
+<p>I found a way to exploit it on google: <a target="_blank" rel="noopener" href="https://www.hackingarticles.in/multiple-ways-to-exploit-tomcat-manager/">https://www.hackingarticles.in/multiple-ways-to-exploit-tomcat-manager/</a></p>
+<h3 id="0x03-Get-User-Shell"><a href="#0x03-Get-User-Shell" class="headerlink" title="0x03 - Get User Shell"></a>0x03 - Get User Shell</h3><p>After I used the method to exploit, I got a shell</p>
+<p><img src="Untitled4.png"></p>
+<p>There is a user directory in <code>/home</code>, it is jack, go to the directory with <code>cd /home/jack</code>, and we can read the user.txt</p>
+<p><img src="Untitled5.png"></p>
+<h3 id="0x04-Privilege-Escalation"><a href="#0x04-Privilege-Escalation" class="headerlink" title="0x04 - Privilege Escalation"></a>0x04 - Privilege Escalation</h3><p>There is two interesting file in /home/jack, the <code>id.sh</code> file we can read and write and execute it, to read it, I find it’s a script that will execute id command and output the result to <code>test.txt</code> file.</p>
+<p><img src="Untitled6.png"></p>
+<p>Check the creation time of the test.txt file, it is the most recently created.</p>
+<p>So I think the <code>id.sh</code> file is a script that will be executed automatically.</p>
+<p><img src="Untitled7.png"></p>
+<p>We can change the script file so that it writes a record to the /etc/passwd file to create a user with root privileges.</p>
+<p><img src="Untitled8.png"></p>
+<p>Wait a while, check the /etc/passwd file, you will find that there is one more record</p>
+<p><img src="Untitled9.png"></p>
+<p>Now, we can use the su command to change the user with ‘reet’ as the username and ‘test’ as the password, and I got root!</p>
+<p>happy hacking!</p>
+
+  </div>
+</article>
+
+
+
+        
+          <div id="footer-post-container">
+  <div id="footer-post">
+
+    <div id="nav-footer" style="display: none">
+      <ul>
+         
+          <li><a href="/">/home</a></li>
+         
+          <li><a href="/archives/">/articles</a></li>
+        
+      </ul>
+    </div>
+
+    <div id="toc-footer" style="display: none">
+      <ol class="toc"><li class="toc-item toc-level-3"><a class="toc-link" href="#0x00-Port-Scan"><span class="toc-number">1.</span> <span class="toc-text">0x00 - Port Scan</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#0x01-Web"><span class="toc-number">2.</span> <span class="toc-text">0x01 - Web</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#0x02-Upload-Webshell"><span class="toc-number">3.</span> <span class="toc-text">0x02 - Upload Webshell</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#0x03-Get-User-Shell"><span class="toc-number">4.</span> <span class="toc-text">0x03 - Get User Shell</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#0x04-Privilege-Escalation"><span class="toc-number">5.</span> <span class="toc-text">0x04 - Privilege Escalation</span></a></li></ol>
+    </div>
+
+    <div id="share-footer" style="display: none">
+      <ul>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.facebook.com/sharer.php?u=https://def410.github.io/2021/01/17/thompson/"><i class="fab fa-facebook fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://twitter.com/share?url=https://def410.github.io/2021/01/17/thompson/&text=tryhackme walkthrough - thompson"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.linkedin.com/shareArticle?url=https://def410.github.io/2021/01/17/thompson/&title=tryhackme walkthrough - thompson"><i class="fab fa-linkedin fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://pinterest.com/pin/create/bookmarklet/?url=https://def410.github.io/2021/01/17/thompson/&is_video=false&description=tryhackme walkthrough - thompson"><i class="fab fa-pinterest fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" href="mailto:?subject=tryhackme walkthrough - thompson&body=Check out this article: https://def410.github.io/2021/01/17/thompson/"><i class="fas fa-envelope fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://getpocket.com/save?url=https://def410.github.io/2021/01/17/thompson/&title=tryhackme walkthrough - thompson"><i class="fab fa-get-pocket fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://reddit.com/submit?url=https://def410.github.io/2021/01/17/thompson/&title=tryhackme walkthrough - thompson"><i class="fab fa-reddit fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.stumbleupon.com/submit?url=https://def410.github.io/2021/01/17/thompson/&title=tryhackme walkthrough - thompson"><i class="fab fa-stumbleupon fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://digg.com/submit?url=https://def410.github.io/2021/01/17/thompson/&title=tryhackme walkthrough - thompson"><i class="fab fa-digg fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.tumblr.com/share/link?url=https://def410.github.io/2021/01/17/thompson/&name=tryhackme walkthrough - thompson&description="><i class="fab fa-tumblr fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://news.ycombinator.com/submitlink?u=https://def410.github.io/2021/01/17/thompson/&t=tryhackme walkthrough - thompson"><i class="fab fa-hacker-news fa-lg" aria-hidden="true"></i></a></li>
+</ul>
+
+    </div>
+
+    <div id="actions-footer">
+        <a id="menu" class="icon" href="#" onclick="$('#nav-footer').toggle();return false;"><i class="fas fa-bars fa-lg" aria-hidden="true"></i> Menu</a>
+        <a id="toc" class="icon" href="#" onclick="$('#toc-footer').toggle();return false;"><i class="fas fa-list fa-lg" aria-hidden="true"></i> TOC</a>
+        <a id="share" class="icon" href="#" onclick="$('#share-footer').toggle();return false;"><i class="fas fa-share-alt fa-lg" aria-hidden="true"></i> Share</a>
+        <a id="top" style="display:none" class="icon" href="#" onclick="$('html, body').animate({ scrollTop: 0 }, 'fast');"><i class="fas fa-chevron-up fa-lg" aria-hidden="true"></i> Top</a>
+    </div>
+
+  </div>
+</div>
+
+        
+        <footer id="footer">
+  <div class="footer-left">
+    Copyright &copy;
+    
+    
+    2016-2021
+    def410
+  </div>
+  <div class="footer-right">
+    <nav>
+      <ul>
+         
+          <li><a href="/">/home</a></li>
+         
+          <li><a href="/archives/">/articles</a></li>
+        
+      </ul>
+    </nav>
+  </div>
+</footer>
+
+    </div>
+    <!-- styles -->
+
+
+
+  <link rel="preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css" crossorigin="anonymous" onload="this.onload=null;this.rel='stylesheet'"/>
+
+
+    <!-- jquery -->
+ 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js" crossorigin="anonymous"></script> 
+
+
+
+
+<!-- clipboard -->
+
+  
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.7/clipboard.min.js" crossorigin="anonymous"></script> 
+  
+  <script type="text/javascript">
+  $(function() {
+    // copy-btn HTML
+    var btn = "<span class=\"btn-copy tooltipped tooltipped-sw\" aria-label=\"Copy to clipboard!\">";
+    btn += '<i class="far fa-clone"></i>';
+    btn += '</span>'; 
+    // mount it!
+    $(".highlight table").before(btn);
+    var clip = new ClipboardJS('.btn-copy', {
+      text: function(trigger) {
+        return Array.from(trigger.nextElementSibling.querySelectorAll('.code')).reduce((str,it)=>str+it.innerText+'\n','')
+      }
+    });
+    clip.on('success', function(e) {
+      e.trigger.setAttribute('aria-label', "Copied!");
+      e.clearSelection();
+    })
+  })
+  </script>
+
+
+<script src="/js/main.js"></script>
+
+<!-- search -->
+
+<!-- Google Analytics -->
+
+<!-- Baidu Analytics -->
+
+<!-- Cloudflare Analytics -->
+
+<!-- Umami Analytics -->
+
+<!-- Disqus Comments -->
+
+
+</body>
+</html>
